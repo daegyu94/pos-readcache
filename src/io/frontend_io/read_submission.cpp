@@ -45,6 +45,9 @@
 #include "src/debug_lib/debug_info_queue.hpp"
 #include "src/event_scheduler/callback.h"
 #include "src/include/pos_event_id.hpp"
+#include "src/read_cache/read_cache.h"
+
+bool isReadCacheEnabled = true; // TODO: by option
 
 namespace pos
 {
@@ -99,6 +102,25 @@ ReadSubmission::Execute(void)
     bool isInSingleBlock = (blockAlignment->GetBlockCount() == 1);
     if (isInSingleBlock)
     {
+        if (isReadCacheEnabled) {
+            uintptr_t addr = 0;
+            BlkAddr startRba = blockAlignment->GetHeadBlock();
+            bool cached = ReadCacheSingleton::Instance()->Delete(startRba, addr);
+            if (cached) {
+                uintptr_t offset = blockAlignment->GetHeadPosition();
+                void *dst = volumeIo->GetBuffer();
+                void *src = (void *) (addr + offset);
+                size_t size = volumeIo->GetSize();
+
+                memcpy(dst, src, size);
+
+                ReadCacheSingleton::Instance()->ReturnBuffer(addr);
+                volumeIo->GetCallback()->Execute(); /* trigger aio completion */
+                volumeIo = nullptr;
+                printf("cached: blkRba=%lu, addr=%lu\n", startRba, addr);
+                return true;
+            }
+        }
         _PrepareSingleBlock();
         _SendVolumeIo(volumeIo);
     }
@@ -162,11 +184,62 @@ ReadSubmission::_ProcessMergedIo(void)
     uint32_t volumeIoCount = merger->GetSplitCount();
     CallbackSmartPtr callback = volumeIo->GetCallback();
     callback->SetWaitingCount(volumeIoCount);
-
+    uint32_t cachedVolumeIoCount = 0;
+     
     for (uint32_t volumeIoIndex = 0; volumeIoIndex < volumeIoCount;
          volumeIoIndex++)
     {
+        if (isReadCacheEnabled) {
+            VolumeIoSmartPtr spVolumeIo = merger->GetSplit(volumeIoIndex);
+            BlockAlignment blkAlignment(
+                    ChangeSectorToByte(spVolumeIo->GetSectorRba()), 
+                    spVolumeIo->GetSize());
+            BlkAddr startRba = blkAlignment.GetHeadBlock();
+            uint32_t blockCount = blkAlignment.GetBlockCount();
+            std::vector<uintptr_t> addrs;
+            
+            /* all blocks cached? */
+            for (uint32_t i = 0; i < blockCount; i++) {
+                BlkAddr blkRba = startRba + i; 
+                uintptr_t addr = 0;
+                
+                bool cached = ReadCacheSingleton::Instance()->Delete(blkRba, addr);
+                if (cached) {
+                    printf("cached: idx=%u, blkRba=%lu, addr=%lu\n", i, blkRba, addr);
+                    addrs.push_back(addr); 
+                }
+            }
+            /* TODO: split again when only some blocks are cached */
+            if (addrs.size() == blockCount) {
+                uintptr_t buffer_addr = (uintptr_t) spVolumeIo->GetBuffer();
+                for (uint32_t i = 0; i < blockCount; i++) {
+                    void *dst = (void *) buffer_addr;
+                    void *src;
+                    size_t size = blkAlignment.GetDataSize(i); 
+
+                    if (i == 0) {
+                        src = (void *) (addrs[i] + BLOCK_SIZE - size);
+                    } else {
+                        src = (void *) addrs[i];
+                    }
+                    buffer_addr += size;
+
+                    memcpy(dst, src, size);
+
+                    ReadCacheSingleton::Instance()->ReturnBuffer(addrs[i]);
+                } 
+                cachedVolumeIoCount++;
+                /* ReadCompletion will destroy */
+                spVolumeIo->GetCallback()->Execute();
+                continue;
+            }
+        }
         _ProcessVolumeIo(volumeIoIndex);
+    }
+
+    if (cachedVolumeIoCount == volumeIoCount) {
+        printf("volumeIoCount=%u, cachedVolumeIoCount=%u\n", 
+                volumeIoCount, cachedVolumeIoCount);
     }
 }
 

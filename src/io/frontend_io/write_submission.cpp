@@ -61,9 +61,11 @@
 #include "src/logger/logger.h"
 #include "src/spdk_wrapper/event_framework_api.h"
 #include "src/state/state_manager.h"
-
+#include "src/read_cache/read_cache.h"
 /*To do Remove after adding array Idx by Array*/
 #include "src/array_mgmt/array_manager.h"
+
+extern bool isReadCacheEnabled;
 
 namespace pos
 {
@@ -147,6 +149,19 @@ WriteSubmission::Execute(void)
             }
             return false;
         }
+        
+        /*
+         * invalidate cache entries for data consistency
+         * key is startRba, iterate as many times as the blockCount
+         */
+        if (isReadCacheEnabled) {
+            BlkAddr endRba = blockAlignment.GetTailBlock();
+            for (BlkAddr blkRba = startRba; blkRba < endRba; blkRba++) {
+                uintptr_t addr;
+                ReadCacheSingleton::Instance()->Delete(blkRba, addr);
+            }
+        }
+
         bool done = _ProcessOwnedWrite();
         if (unlikely(!done))
         {

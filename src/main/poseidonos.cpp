@@ -82,6 +82,8 @@
 #include "src/telemetry/telemetry_client/telemetry_publisher.h"
 #include "src/trace/otlp_factory.h"
 #include "src/trace/trace_exporter.h"
+#include "src/read_cache/read_cache.h"
+#include "src/read_cache/prefetch_worker.h"
 
 namespace pos
 {
@@ -233,6 +235,9 @@ Poseidonos::Terminate(void)
     EventFrameworkApiSingleton::ResetInstance();
     SpdkSingleton::ResetInstance();
     IoTimeoutCheckerSingleton::ResetInstance();
+    ReadCacheSingleton::ResetInstance();
+    PrefetchWorkerSingleton::ResetInstance();
+
     curr_term_seq_num++;
     POS_REPORT_TRACE(EID(POS_TRACE_TERMINATE_PHASE_3), "POS Terminate Sequence In Progress({}/{}): Phase 3(AIR)...", curr_term_seq_num, total_term_seq_cnt);
     air_deactivate();
@@ -414,6 +419,13 @@ Poseidonos::_SetupThreadModel(void)
     FlushCmdManagerSingleton::Instance();
 
     IoTimeoutCheckerSingleton::Instance()->Initialize();
+    size_t cacheSize = 1 << 30; // TODO: by option
+    ReadCacheSingleton::Instance()->Initialize(cacheSize);
+
+    int numThreads = 1;
+    std::string port = "50051";
+    std::string svrAddr = "0.0.0.0:" + port;
+    PrefetchWorkerSingleton::Instance()->Initialize(numThreads, svrAddr);
 
     cpu_set_t generalCPUSet = affinityManager->GetCpuSet(CoreType::GENERAL_USAGE);
     EasyTelemetryPublisherSingleton::Instance()->Initialize(ConfigManagerSingleton::Instance(), generalCPUSet);

@@ -918,6 +918,17 @@ NvmfTarget::SetSubsystemArrayName(string& subnqn, string& arrayName)
     return true;
 }
 
+bool NvmfTarget::SetSubsystemArrayName(string& subnqn, string& arrayName, 
+        int &arrayID) {
+    auto search = subsystemToArrayName.find(subnqn);
+    if (subsystemToArrayName.end() != search) {
+        return false;
+    }
+    subsystemToArrayName[subnqn] = arrayName;
+    subsystemToArrayID[subnqn] = arrayID;
+    return true;
+}
+
 string
 NvmfTarget::GetSubsystemArrayName(string& subnqn)
 {
@@ -929,6 +940,14 @@ NvmfTarget::GetSubsystemArrayName(string& subnqn)
     return subsystemToArrayName[subnqn];
 }
 
+int NvmfTarget::GetSubsystemArrayID(string& subnqn) {
+    auto search = subsystemToArrayID.find(subnqn);
+    if (subsystemToArrayID.end() == search) {
+        return -1;
+    }
+    return subsystemToArrayID[subnqn];
+}
+
 void
 NvmfTarget::RemoveSubsystemArrayName(string& subnqn)
 {
@@ -936,6 +955,7 @@ NvmfTarget::RemoveSubsystemArrayName(string& subnqn)
     if ((nullptr != subsystem) && (0 == GetSubsystemNsCnt(subsystem)))
     {
         subsystemToArrayName.erase(subnqn);
+        subsystemToArrayID.erase(subnqn);
     }
 }
 

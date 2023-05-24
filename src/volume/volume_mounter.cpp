@@ -260,7 +260,8 @@ VolumeMounter::_CheckAndSetSubsystemToArray(string subnqn, string volumeArrayNam
     string subnqnArrayName = nvmfTarget->GetSubsystemArrayName(subnqn);
     if (subnqnArrayName == "")
     {
-        bool result = nvmfTarget->SetSubsystemArrayName(subnqn, volumeArrayName);
+        //bool result = nvmfTarget->SetSubsystemArrayName(subnqn, volumeArrayName);
+        bool result = nvmfTarget->SetSubsystemArrayName(subnqn, volumeArrayName, arrayID);
         if (false == result)
         {
             ret = EID(MOUNT_VOL_SUBSYSTEM_ALREADY_OCCUPIED);

@@ -98,7 +98,10 @@ public:
         PosNvmfEventDoneCallback_t cb, void* cbArg);
     string GetPosBdevUuid(uint32_t id, string arrayName);
     virtual bool SetSubsystemArrayName(string& subnqn, string& arrayName);
+    virtual bool SetSubsystemArrayName(string& subnqn, string& arrayName, 
+            int &arrayID);
     virtual string GetSubsystemArrayName(string& subnqn);
+    virtual int GetSubsystemArrayID(string& subnqn);
 
     virtual void RemoveSubsystemArrayName(string& subnqn);
 
@@ -130,6 +133,7 @@ private:
     SpdkNvmfCaller* spdkNvmfCaller;
     ConfigManager* configManager;
     map<string, string> subsystemToArrayName;
+    map<string, int> subsystemToArrayID;
 
     bool _InitPosBdev(string bdevName);
     static struct EventContext* _CreateEventContext(PosNvmfEventDoneCallback_t callback,
